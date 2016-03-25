@@ -65,46 +65,58 @@ class ViewController: UIViewController {
                     self.setUIEnabled(true)
                 }
             }
-
             
-            if error == nil {
-                
-                if let data = data {
-                
-                    let parsedResult: AnyObject!
-                    do {
-                    parsedResult = try NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments)
-                    } catch {
-                        displayError("Could not parse the data as JSON: '\(data)'")
-                        return
-                    }
-                    
-                    if let photosDictionary =
-                        parsedResult [Constants.FlickrResponseKeys.Photos] as? [String: AnyObject],
-                        photoArray = photosDictionary [Constants.FlickrResponseKeys.Photo] as? [[String: AnyObject]]{
-                        
-                            let randomPhotoIndex = Int(arc4random_uniform(UInt32(photoArray.count)))
-                            let photoDictionary = photoArray[randomPhotoIndex] as [String: AnyObject]
-                            
-                            if let imageUrlString = photoDictionary[Constants.FlickrResponseKeys.MediumURL] as? String,
-                                let photoTitle = photoDictionary[Constants.FlickrResponseKeys.Title] as? String {
-                                    
-                                    let imageURL = NSURL(string: imageUrlString)
-                                    if let imageData = NSData(contentsOfURL: imageURL!){
-                                        
-                                        performUIUpdatesOnMain(){ self.photoImageView.image = UIImage(data: imageData)
-                                            self.photoTitleLabel.text = photoTitle
-                                            self.setUIEnabled(true)
-                                        }
-                                    }
-                                    
-                            }
-                    }
+            guard (error == nil) else {
+                displayError("There was an error with your request: \(error)")
+                return
             }
+            
+            guard let statusCode = (response as? NSHTTPURLResponse)?.statusCode where statusCode >= 200 && statusCode <= 299 else {
+                displayError("Your request returned a status code other then 2xx!")
+                return
+            }
+            
+            guard let data = data else {
+                displayError("No data was returned by the request!")
+                return
+            }
+
+            let parsedResult: AnyObject!
+            do {
+                parsedResult = try NSJSONSerialization.JSONObjectWithData(data, options: .AllowFragments)
+            } catch {
+                displayError("Could not parse the data as JSON: '\(data)'")
+                return
+            }
+            
+            
+            guard let photosDictionary = parsedResult [Constants.FlickrResponseKeys.Photos] as? [String: AnyObject],
+                photoArray = photosDictionary [Constants.FlickrResponseKeys.Photo] as? [[String: AnyObject]] else {
+                    displayError("Cannot find keys '\(Constants.FlickrResponseKeys.Photos)' and '\(Constants.FlickrResponseKeys.Photo)' in \(parsedResult)")
+                    return
+            }
+                        
+            let randomPhotoIndex = Int(arc4random_uniform(UInt32(photoArray.count)))
+            let photoDictionary = photoArray[randomPhotoIndex] as [String: AnyObject]
+            let photoTitle = photoDictionary[Constants.FlickrResponseKeys.Title] as? String
+                            
+            guard let imageUrlString = photoDictionary[Constants.FlickrResponseKeys.MediumURL] as? String else {
+                displayError("Cannot find key '\(Constants.FlickrResponseKeys.MediumURL)'in \(photoDictionary)")
+                return
+            }
+                                    
+            let imageURL = NSURL(string: imageUrlString)
+            if let imageData = NSData(contentsOfURL: imageURL!){
+                performUIUpdatesOnMain(){
+                    self.photoImageView.image = UIImage(data: imageData)
+                    self.photoTitleLabel.text = photoTitle
+                    self.setUIEnabled(true)
+                }
+            } else {
+                displayError("Image does not exist at \(imageURL)")
             }
         }
 
-        
         task.resume()
         
         // TODO: Write the network code here!
